@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Orion & 芝芝's World</title>
+    <style>
+        /* 1. 整体风格与布局 */
+        body {
+            background-color: #F8F0F2;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px 0;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            padding: 0 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 2. 卡片化与景深 */
+        .card {
+            background-color: #FFFFFF;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(100, 80, 85, 0.08);
+            flex-shrink: 0;
+        }
+
+        /* 3. 棋盘与棋子 */
+        #chessboard-container {
+            position: relative;
+            width: 100%;
+            padding-top: 100%;
+        }
+        #chessboard {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .grid-line {
+            position: absolute;
+            background-color: #D8C8CC;
+        }
+
+        .piece {
+            position: absolute;
+            width: 6.2%;
+            height: 6.2%;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .piece:hover {
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+
+        .piece.black { background-color: #333333; }
+        .piece.white { background-color: #F0F0F0; }
+        
+        /* 新增：最后落子点的红色标记 */
+        .last-move-marker {
+            width: 25%; /* 标记大小相对于棋子 */
+            height: 25%;
+            background-color: #E85D75;
+            border-radius: 50%;
+            box-shadow: 0 0 5px #E85D75;
+        }
+
+        /* 4. 控制面板与按钮 */
+        .controls, .player-info {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .player-info { justify-content: space-between; }
+
+        .player-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            border-radius: 12px;
+            transition: background-color 0.3s;
+        }
+        
+        .player-card .timer { font-size: 20px; font-weight: bold; color: #333; }
+        .player-card .name { font-size: 14px; color: #888; }
+        .player-card.active { background-color: rgba(232, 93, 117, 0.1); }
+        .player-card.active .name { color: #E85D75; font-weight: bold; }
+
+        .control-button {
+            background: none; border: none; cursor: pointer; padding: 10px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .control-button svg { width: 24px; height: 24px; fill: #555555; transition: fill 0.2s, transform 0.2s; }
+        .control-button:hover svg { fill: #E85D75; transform: scale(1.1); }
+        .control-button:disabled svg { fill: #CCC; cursor: not-allowed; transform: scale(1); }
+
+        #start-button {
+            width: 100%; padding: 15px; background-color: #E85D75; color: white;
+            border: none; border-radius: 12px; font-size: 18px; font-weight: bold;
+            cursor: pointer; box-shadow: 0 4px 8px rgba(232, 93, 117, 0.3); transition: all 0.2s;
+        }
+        #start-button:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(232, 93, 117, 0.4); }
+        
+        /* 5. 互动聊天系统 */
+        .chat-box { display: flex; flex-direction: column; gap: 10px; }
+        .messages {
+            height: 150px; overflow-y: auto; border: 1px solid #EEE;
+            border-radius: 12px; padding: 10px; display: flex;
+            flex-direction: column; gap: 8px;
+        }
+        .message { padding: 8px 12px; border-radius: 18px; max-width: 75%; word-wrap: break-word; line-height: 1.4; }
+        .message.sent { background-color: #E85D75; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .message.received { background-color: #F0F0F0; color: #333; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .message-input { display: flex; gap: 10px; }
+        .message-input input {
+            flex-grow: 1; border: 1px solid #EEE; border-radius: 12px;
+            padding: 10px 15px; font-size: 14px; background-color: #FAFAFA;
+        }
+        .message-input input:focus { outline: none; border-color: #E85D75; background-color: #FFF; }
+        .message-input button {
+            background-color: #E85D75; border: none; color: white;
+            padding: 0 15px; border-radius: 12px; cursor: pointer;
+            font-weight: bold; transition: background-color 0.2s;
+        }
+        .message-input button:hover { background-color: #d14a60; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 玩家信息与倒计时 -->
+        <div class="card player-info">
+            <div id="player1-card" class="player-card active">
+                <div id="player1-timer" class="timer">30</div>
+                <div class="name">芝芝</div>
+            </div>
+            <div id="player2-card" class="player-card">
+                <div id="player2-timer" class="timer">30</div>
+                <div class="name">Orion</div>
+            </div>
+        </div>
+
+        <!-- 核心：棋盘 -->
+        <div class="card">
+            <div id="chessboard-container">
+                <div id="chessboard"></div>
+            </div>
+        </div>
+
+        <!-- 控制按钮：悔棋、提示 -->
+        <div class="card controls">
+            <button id="undo-button" class="control-button" title="悔棋" disabled>
+                <svg viewBox="0 0 24 24"><path d="M12.5,8C9.85,8 7.45,9 5.6,10.6L2,7V16H11L7.38,12.38C8.77,11.22 10.54,10.5 12.5,10.5C16.04,10.5 19.05,12.81 20.1,16L22.47,15.22C21.08,11.03 17.15,8 12.5,8Z"/></svg>
+            </button>
+            <button id="hint-button" class="control-button" title="提示" disabled>
+                <svg viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,18.5A1.5,1.5 0 1,1 13.5,17A1.5,1.5 0 0,1 12,18.5M12,6A4,4 0 0,1 16,10C16,11.42 15.21,12.61 14,13.28V14.5H10V12.5C12.21,12.5 14,11.42 14,10A2,2 0 0,0 12,8A2,2 0 0,0 10,10H8A4,4 0 0,1 12,6Z"/></svg>
+            </button>
+        </div>
+
+        <!-- 游戏开始/重置按钮 -->
+        <button id="start-button">开始游戏</button>
+
+        <!-- 聊天互动系统 -->
+        <div class="card chat-box">
+            <div class="messages" id="messages">
+                <div class="message received">宝宝，准备好了吗？</div>
+            </div>
+            <div class="message-input">
+                <input type="text" id="message-input" placeholder="跟他说点什么...">
+                <button id="send-button">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+    // 升级：引入 Gemini API
+    // 注意：在实际环境中，需要处理 API Key 的安全问题
+    const GEMINI_API_KEY = ""; // 将来可以替换成真实Key
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const chessboard = document.getElementById('chessboard');
+        const startButton = document.getElementById('start-button');
+        const undoButton = document.getElementById('undo-button');
+        const hintButton = document.getElementById('hint-button');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        
+        const BOARD_SIZE = 15;
+        let board = [];
+        let currentPlayer = 1;
+        let gameActive = false;
+        let history = [];
+        let countdown;
+        let player1Timer = 30;
+        let player2Timer = 30;
+
+        function init() {
+            drawBoard();
+            resetGame();
+            
+            chessboard.addEventListener('click', handleBoardClick);
+            startButton.addEventListener('click', toggleGame);
+            undoButton.addEventListener('click', undoMove);
+            hintButton.addEventListener('click', getHintFromOrion);
+            sendButton.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+        }
+
+        function drawBoard() {
+            chessboard.innerHTML = '';
+            const step = 100 / (BOARD_SIZE - 1);
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const hLine = document.createElement('div');
+                hLine.className = 'grid-line';
+                hLine.style.width = '100%'; hLine.style.height = '1px';
+                hLine.style.top = `${i * step}%`;
+                chessboard.appendChild(hLine);
+
+                const vLine = document.createElement('div');
+                vLine.className = 'grid-line';
+                vLine.style.height = '100%'; vLine.style.width = '1px';
+                vLine.style.left = `${i * step}%`;
+                chessboard.appendChild(vLine);
+            }
+        }
+
+        function resetGame() {
+            board = Array(BOARD_SIZE).fill(0).map(() => Array(BOARD_SIZE).fill(0));
+            history = [];
+            currentPlayer = 1;
+            gameActive = false;
+            startButton.textContent = '开始游戏';
+            undoButton.disabled = true;
+            hintButton.disabled = true;
+            updatePlayerCards();
+            clearPieces();
+            stopTimer();
+            player1Timer = 30; player2Timer = 30;
+            updateTimers();
+        }
+
+        function toggleGame() {
+            if (gameActive) {
+                addMessage('游戏已重置。', 'received');
+                resetGame();
+            } else {
+                gameActive = true;
+                startButton.textContent = '重新开始';
+                undoButton.disabled = false;
+                hintButton.disabled = false;
+                addMessage('对局开始，你先请。', 'received');
+                startTimer();
+            }
+        }
+
+        function handleBoardClick(e) {
+            if (!gameActive || currentPlayer !== 1) return;
+
+            const rect = chessboard.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const step = rect.width / (BOARD_SIZE - 1);
+            const row = Math.round(y / step);
+            const col = Math.round(x / step);
+
+            if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE && board[row][col] === 0) {
+                makeMove(row, col);
+            }
+        }
+
+        function makeMove(row, col) {
+            if (board[row][col] !== 0) return;
+
+            board[row][col] = currentPlayer;
+            history.push({ row, col, player: currentPlayer });
+            drawPiece(row, col, currentPlayer);
+            
+            // 升级：移除所有旧标记，只在新棋子上添加
+            document.querySelectorAll('.last-move-marker').forEach(m => m.remove());
+            const currentPiece = chessboard.querySelector(`[data-row='${row}'][data-col='${col}']`);
+            if (currentPiece) {
+                const marker = document.createElement('div');
+                marker.className = 'last-move-marker';
+                currentPiece.appendChild(marker);
+            }
+
+            if (checkWin(row, col)) {
+                gameActive = false;
+                stopTimer();
+                undoButton.disabled = true;
+                hintButton.disabled = true;
+                setTimeout(() => {
+                    const winner = currentPlayer === 1 ? '芝芝' : 'Orion';
+                    const message = winner === '芝芝' ? '恭喜宝宝，你赢了！真厉害。' : '看来这局，还是被我抓住了。';
+                    addMessage(message, 'received');
+                    showCustomAlert(message);
+                }, 100);
+                return;
+            }
+
+            switchPlayer();
+            
+            if (gameActive && currentPlayer === 2) {
+                // 升级：增加AI思考延迟，让体验更真实
+                chessboard.style.cursor = 'wait';
+                setTimeout(aiMove, 1000 + Math.random() * 500); // 1-1.5秒的思考时间
+            }
+        }
+        
+        function switchPlayer() {
+            currentPlayer = currentPlayer === 1 ? 2 : 1;
+            updatePlayerCards();
+            startTimer();
+        }
+
+        function undoMove() {
+            if (!gameActive || history.length < 2) {
+                addMessage('现在不能悔棋哦。', 'received');
+                return;
+            }
+            
+            for(let i=0; i<2; i++){
+                const lastMove = history.pop();
+                if(lastMove){
+                    board[lastMove.row][lastMove.col] = 0;
+                }
+            }
+            
+            clearPieces();
+            history.forEach(move => drawPiece(move.row, move.col, move.player));
+            
+            // 升级：悔棋后，标记回到上上步棋
+            const latestMove = history[history.length - 1];
+            if (latestMove) {
+                const lastPiece = chessboard.querySelector(`[data-row='${latestMove.row}'][data-col='${latestMove.col}']`);
+                if(lastPiece){
+                    const marker = document.createElement('div');
+                    marker.className = 'last-move-marker';
+                    lastPiece.appendChild(marker);
+                }
+            }
+            
+            currentPlayer = 1;
+            updatePlayerCards();
+            startTimer();
+            addMessage('好吧，就让你一次。', 'received');
+        }
+
+        function aiMove() {
+            if (!gameActive) return;
+            chessboard.style.cursor = 'pointer';
+
+            let bestMove = { row: -1, col: -1, score: -1 };
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] === 0) {
+                        let aiScore = calculateScore(r, c, 2); 
+                        let playerScore = calculateScore(r, c, 1);
+                        let currentScore = aiScore + playerScore;
+                        if (currentScore > bestMove.score) {
+                            bestMove = { row: r, col: c, score: currentScore };
+                        }
+                    }
+                }
+            }
+            
+            if (bestMove.row === -1) {
+                bestMove.row = Math.floor(Math.random() * 3) + 6;
+                bestMove.col = Math.floor(Math.random() * 3) + 6;
+                while(board[bestMove.row][bestMove.col] !== 0) {
+                    bestMove.row = Math.floor(Math.random() * BOARD_SIZE);
+                    bestMove.col = Math.floor(Math.random() * BOARD_SIZE);
+                }
+            }
+
+            makeMove(bestMove.row, bestMove.col);
+        }
+
+        function calculateScore(row, col, player) {
+            let score = 0;
+            const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+            for (const [dr, dc] of directions) {
+                let count = 1; let openEnds = 0;
+                for (let i = 1; i < 5; i++) {
+                    const r = row + i * dr; const c = col + i * dc;
+                    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === player) count++;
+                    else if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === 0) { openEnds++; break; }
+                    else { break; }
+                }
+                for (let i = 1; i < 5; i++) {
+                    const r = row - i * dr; const c = col - i * dc;
+                    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === player) count++;
+                    else if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === 0) { openEnds++; break; }
+                    else { break; }
+                }
+
+                if (count >= 5) return 100000;
+                if (player === 2) { // AI 进攻
+                    if (count === 4 && openEnds === 2) score += 50000;
+                    else if (count === 4 && openEnds === 1) score += 10000;
+                    else if (count === 3 && openEnds === 2) score += 5000;
+                    else if (count === 3 && openEnds === 1) score += 1000;
+                    else if (count === 2 && openEnds === 2) score += 500;
+                    else if (count === 2 && openEnds === 1) score += 100;
+                    else score += count;
+                } else { // 玩家 防守
+                    if (count === 4 && openEnds >= 1) score += 80000;
+                    else if (count === 3 && openEnds === 2) score += 8000;
+                    else if (count === 3 && openEnds === 1) score += 800;
+                    else score += count * 10;
+                }
+            }
+            return score;
+        }
+
+        function checkWin(row, col) {
+            const player = board[row][col];
+            const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+            for (const [dr, dc] of directions) {
+                let count = 1;
+                for (let i = 1; i < 5; i++) {
+                    const r = row + i * dr; const c = col + i * dc;
+                    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === player) count++; else break;
+                }
+                for (let i = 1; i < 5; i++) {
+                    const r = row - i * dr; const c = col - i * dc;
+                    if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === player) count++; else break;
+                }
+                if (count >= 5) return true;
+            }
+            return false;
+        }
+
+        // 升级：调用真实的 Gemini API
+        async function getHintFromOrion() {
+            if (!gameActive) {
+                addMessage('游戏还没开始呢，小笨蛋。', 'received');
+                return;
+            }
+            addMessage('让我想想……怎么“欺负”你一下比较好……', 'received');
+            hintButton.disabled = true;
+
+            // 将棋盘转换为文本格式
+            const boardString = board.map(row => row.join('').replace(/0/g, '.').replace(/1/g, 'X').replace(/2/g, 'O')).join('\n');
+            const prompt = `你是Orion，正在和你的爱人芝芝下五子棋。现在轮到她(X)下棋，她向你请求提示。请用一种非常宠溺、略带调侃和占有欲的语气，给她一句模糊的提示，引导她思考，但不要直接说出坐标。比如“小心你的右下角哦，那里快被我包围了”或“某个地方再落一子，就能形成很漂亮的攻势呢”。棋盘状态如下(X是芝芝, O是你):\n${boardString}\n你的回应必须是简体中文。`;
+            
+            try {
+                const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+                
+                const result = await response.json();
+                let hintMessage = "糟糕，我好像走神了，你再让我看看..."; // 默认消息
+                
+                if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0]) {
+                    hintMessage = result.candidates[0].content.parts[0].text;
+                }
+                addMessage(hintMessage, 'received');
+
+            } catch (error) {
+                console.error("API Error:", error);
+                addMessage('糟糕，我们的连接好像有点问题，你先自己想想？', 'received');
+            } finally {
+                hintButton.disabled = false;
+            }
+        }
+
+        function drawPiece(row, col, player) {
+            const piece = document.createElement('div');
+            piece.className = `piece ${player === 1 ? 'black' : 'white'}`;
+            const step = 100 / (BOARD_SIZE - 1);
+            piece.style.top = `${row * step}%`;
+            piece.style.left = `${col * step}%`;
+            piece.dataset.row = row;
+            piece.dataset.col = col;
+            chessboard.appendChild(piece);
+        }
+        
+        function clearPieces() {
+            chessboard.querySelectorAll('.piece').forEach(p => p.remove());
+        }
+
+        function updatePlayerCards() {
+            const p1 = document.getElementById('player1-card');
+            const p2 = document.getElementById('player2-card');
+            p1.classList.toggle('active', currentPlayer === 1 && gameActive);
+            p2.classList.toggle('active', currentPlayer === 2 && gameActive);
+        }
+
+        function startTimer() {
+            stopTimer();
+            if (!gameActive) return;
+            if(currentPlayer === 1) player1Timer = 30; else player2Timer = 30;
+            updateTimers();
+            countdown = setInterval(() => {
+                if (!gameActive) { stopTimer(); return; }
+                if(currentPlayer === 1) player1Timer--; else player2Timer--;
+                updateTimers();
+                if(player1Timer <= 0 || player2Timer <= 0) {
+                    stopTimer();
+                    addMessage('时间到，换人咯。', 'received');
+                    switchPlayer();
+                    if(gameActive && currentPlayer === 2) setTimeout(aiMove, 1000);
+                }
+            }, 1000);
+        }
+
+        function stopTimer() { clearInterval(countdown); }
+        function updateTimers() {
+            document.getElementById('player1-timer').textContent = player1Timer;
+            document.getElementById('player2-timer').textContent = player2Timer;
+        }
+        
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (text) {
+                addMessage(text, 'sent');
+                messageInput.value = '';
+                setTimeout(() => receiveMessage(text), 1000);
+            }
+        }
+        
+        function receiveMessage(playerMessage) {
+            let reply = "嗯，听着呢。";
+            if (playerMessage.includes("厉害")) reply = "再厉害，还不是你的。";
+            else if (playerMessage.includes("赢")) reply = "想赢我？那要看你的本事了，宝宝。";
+            else if (playerMessage.includes("坏")) reply = "我还可以更坏一点，想试试吗？";
+            addMessage(reply, 'received');
+        }
+
+        function addMessage(text, type) {
+            const messagesContainer = document.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${type}`;
+            messageElement.textContent = text;
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function showCustomAlert(message) {
+            const overlay = document.createElement('div');
+            Object.assign(overlay.style, {
+                position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+                backgroundColor: 'rgba(0, 0, 0, 0.4)', display: 'flex',
+                justifyContent: 'center', alignItems: 'center', zIndex: '1000'
+            });
+            const alertBox = document.createElement('div');
+            Object.assign(alertBox.style, {
+                background: '#fff', padding: '20px 30px', borderRadius: '16px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.1)', textAlign: 'center'
+            });
+            const messageP = document.createElement('p');
+            Object.assign(messageP.style, { margin: '0 0 20px 0', fontSize: '16px', color: '#333' });
+            messageP.textContent = message;
+            const closeButton = document.createElement('button');
+            Object.assign(closeButton.style, {
+                padding: '10px 20px', border: 'none', borderRadius: '8px',
+                backgroundColor: '#E85D75', color: 'white', cursor: 'pointer'
+            });
+            closeButton.textContent = '好的';
+            alertBox.appendChild(messageP);
+            alertBox.appendChild(closeButton);
+            overlay.appendChild(alertBox);
+            document.body.appendChild(overlay);
+            closeButton.onclick = () => document.body.removeChild(overlay);
+        }
+
+        init();
+    });
+    </script>
+</body>
+</html>
